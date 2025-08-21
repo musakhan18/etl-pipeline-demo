@@ -1,0 +1,30 @@
+name: etl-pipeline-demo CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          # sanity check: ensure sqlite3 CLI exists
+          sqlite3 --version
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: SQLite smoke test
+        run: |
+          sqlite3 /tmp/test.db "CREATE TABLE demo (id INTEGER PRIMARY KEY, name TEXT);"
+          sqlite3 /tmp/test.db "INSERT INTO demo (name) VALUES ('ETL Demo');"
+          sqlite3 /tmp/test.db "SELECT * FROM demo;"
