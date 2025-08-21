@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import pandas as pd
 from pathlib import Path
@@ -9,11 +10,12 @@ from etl.etl_job import (
     run_etl,
 )
 
+# Path to product Excel file
+PRODUCT_XLSX = Path("data/raw/Product.xlsx")
 
-def test_extract_and_transform_trims_and_snake_cases(tmp_path):
-    excel_path = str(Path("data/raw/Product.xlsx"))
 
-    df = extract_excel_to_df(excel_path)
+def test_extract_and_transform_trims_and_snake_cases():
+    df = extract_excel_to_df(str(PRODUCT_XLSX))
     tfm = transform_df(df)
 
     # Column names snake-cased, empties dropped
@@ -21,7 +23,7 @@ def test_extract_and_transform_trims_and_snake_cases(tmp_path):
     assert "color" in tfm.columns
     assert "" not in tfm.columns
 
-    # Check trimming
+    # No leading/trailing spaces in text fields
     assert all(val is None or str(val).strip() == str(val)
                for val in tfm["english_product_name"].dropna())
     assert all(val is None or str(val).strip() == str(val)
@@ -33,21 +35,18 @@ def test_extract_and_transform_trims_and_snake_cases(tmp_path):
 
 
 def test_product_excel_upsert_is_idempotent(tmp_db_path):
-    excel_path = str(Path("data/raw/Product.xlsx"))
-
     # First ETL run
-    rows1 = run_etl(excel_path, tmp_db_path, "products")
-
-    # Second ETL run with same file -> should not create duplicates
-    rows2 = run_etl(excel_path, tmp_db_path, "products")
+    rows1 = run_etl(str(PRODUCT_XLSX), tmp_db_path, "products")
+    # Second ETL run on identical file -> no duplicates
+    rows2 = run_etl(str(PRODUCT_XLSX), tmp_db_path, "products")
 
     with sqlite3.connect(tmp_db_path) as conn:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM products")
         (count,) = cur.fetchone()
 
-    # Expected unique rows from source file
-    df = pd.read_excel(excel_path)
+    # Expected unique rows count
+    df = pd.read_excel(PRODUCT_XLSX)
     expected_unique_count = (
         df.drop_duplicates()
           .applymap(lambda x: str(x).strip() if isinstance(x, str) else x)
@@ -55,18 +54,17 @@ def test_product_excel_upsert_is_idempotent(tmp_db_path):
           .shape[0]
     )
 
-    # Assertions
-    assert rows1 == expected_unique_count
-    assert rows2 == 0  # second run shouldn't insert duplicates
     assert count == expected_unique_count
+    assert rows1 == expected_unique_count
+    assert rows2 == 0
 
 
 def test_product_excel_extends_schema_on_new_columns(tmp_db_path, tmp_path):
-    excel1 = Path("data/raw/Product.xlsx")
-    run_etl(str(excel1), tmp_db_path, "products2")
+    # First ETL run with original file
+    run_etl(str(PRODUCT_XLSX), tmp_db_path, "products2")
 
-    # Second run -> add new column
-    df = pd.read_excel(excel1)
+    # Second run with new column
+    df = pd.read_excel(PRODUCT_XLSX)
     df["discount"] = 10
     new_excel = tmp_path / "Product_with_discount.xlsx"
     df.to_excel(new_excel, index=False)
@@ -81,7 +79,6 @@ def test_product_excel_extends_schema_on_new_columns(tmp_db_path, tmp_path):
 
         cur.execute("SELECT english_product_name, discount FROM products2 LIMIT 5")
         rows = cur.fetchall()
-
         has_null = any(r[1] is None for r in rows)
         has_discount = any(r[1] == "10" for r in rows)
         assert has_null and has_discount
