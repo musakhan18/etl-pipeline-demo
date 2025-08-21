@@ -20,8 +20,13 @@ jobs:
           # sanity check: ensure sqlite3 CLI exists
           sqlite3 --version
 
+      # - name: Run tests
+      #   run: pytest -q
+
       - name: Run tests
-        run: pytest -q
+        run: |
+          PYTHONPATH=$PWD pytest -q
+
 
       - name: SQLite smoke test
         run: |
