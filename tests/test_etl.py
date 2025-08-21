@@ -75,3 +75,4 @@ def test_product_excel_extends_schema_on_new_columns(tmp_db_path, tmp_path):
         has_null = any(r[1] is None for r in rows)
         has_discount = any(r[1] == "10" for r in rows)
         assert has_null and has_discount
+
